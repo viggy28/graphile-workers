@@ -1,1 +1,1 @@
-CREATE INDEX webhooks_id_idx ON webhooks (id);
+CREATE INDEX CONCURRENTLY webhooks_id_idx ON webhooks (id);
