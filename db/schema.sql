@@ -14,5 +14,3 @@ CREATE TABLE clicks (
   user_agent TEXT,
   country    TEXT
 );
-
-CREATE INDEX clicks_url_id_idx ON clicks (url_id);

@@ -1,0 +1,72 @@
+name: lint-migrations
+
+on:
+  pull_request:
+    paths:
+      - 'migrations/**/*.sql'
+      - 'scripts/lint_migration.py'
+      - '.github/workflows/lint-migrations.yml'
+
+jobs:
+  lint:
+    name: postgres-migration-safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pglast
+        run: pip install 'pglast>=6.0'
+
+      - name: Identify changed migrations
+        id: changed
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          changed=$(git diff --name-only --diff-filter=AM "$base" HEAD -- 'migrations/**/*.sql' || true)
+          if [ -z "$changed" ]; then
+            echo "files=" >> $GITHUB_OUTPUT
+            echo "No changed migration files."
+          else
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$changed" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "Changed migrations:"
+            echo "$changed"
+          fi
+
+      - name: Run linter
+        if: steps.changed.outputs.files != ''
+        id: lint
+        run: |
+          set +e
+          xargs -d '\n' python3 scripts/lint_migration.py <<< "${{ steps.changed.outputs.files }}"
+          human_exit=$?
+          xargs -d '\n' python3 scripts/lint_migration.py --format=json <<< "${{ steps.changed.outputs.files }}" > findings.json
+          echo "exit_code=$human_exit" >> $GITHUB_OUTPUT
+          exit 0
+
+      - name: Annotate PR with findings
+        if: steps.changed.outputs.files != '' && always()
+        run: |
+          python3 - << 'PYEOF'
+          import json, pathlib, sys
+          p = pathlib.Path("findings.json")
+          if not p.exists(): sys.exit(0)
+          for f in json.loads(p.read_text()):
+              level = "error" if f["severity"] == "error" else "warning"
+              file = f["file"]
+              line = 1
+              msg = f'{f["rule"]}: {f["message"]}'
+              print(f'::{level} file={file},line={line}::{msg}')
+          PYEOF
+
+      - name: Fail if errors
+        if: steps.lint.outputs.exit_code != '0'
+        run: |
+          echo "::error::Migration linter found errors. See annotations above."
+          exit 1
