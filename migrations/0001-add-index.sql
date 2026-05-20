@@ -1,1 +1,1 @@
-CREATE INDEX CONCURRENTLY clicks_url_id_idx ON clicks (url_id);
+CREATE INDEX clicks_url_id_idx ON clicks (url_id);
