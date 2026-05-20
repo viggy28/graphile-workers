@@ -1,0 +1,1 @@
+CREATE INDEX webhooks_id_idx ON webhooks (id);
